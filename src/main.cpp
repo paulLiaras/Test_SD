@@ -33,21 +33,28 @@
 #include <SD.h>
 #include <SerialFlash.h>
 
+// ==============================================================
+#define MODE_HEXA // Commentez (//) cette ligne pour repasser en mode classique (1 fichier a la fois)
+// ==============================================================
+
 AudioPlaySdWav           playWav1;
 AudioPlaySdWav           playWav2;
 AudioPlaySdWav           playWav3;
+AudioPlaySdWav           playWav4;
+AudioPlaySdWav           playWav5;
+AudioPlaySdWav           playWav6;
 
-// Use one of these 3 output types: Digital I2S, Digital S/PDIF, or Analog DAC
+// On garde uniquement un objet de sortie pour générer l'horloge audio interne (le "tempo").
+// Sans lui, la progression de lecture (positionMillis) n'avance pas !
 AudioOutputI2S           audioOutput;
 //AudioOutputSPDIF       audioOutput;
 //AudioOutputAnalog      audioOutput;
 //On Teensy LC, use this for the Teensy Audio Shield:
 //AudioOutputI2Sslave    audioOutput;
 
-AudioConnection          patchCord1(playWav1, 0, audioOutput, 0);
-AudioConnection          patchCord2(playWav1, 1, audioOutput, 1);
-AudioControlSGTL5000     sgtl5000_1;
-
+// AUCUN AudioConnection (patchCord) n'est créé.
+// Le son est lu par la carte SD, mais n'est envoyé vers aucune sortie.
+// Il n'y aura donc aucune accumulation ni saturation.
 // Use these with the Teensy Audio Shield
 //#define SDCARD_CS_PIN    10
 //#define SDCARD_MOSI_PIN  7   // Teensy 4 ignores this, uses pin 11
@@ -71,7 +78,11 @@ void setup() {
 
   // Audio connections require memory to work.  For more
   // detailed information, see the MemoryAndCpuUsage example
+#ifdef MODE_HEXA
+  AudioMemory(30); // Augmente pour supporter 6 lecteurs en meme temps
+#else
   AudioMemory(8);
+#endif
 
   // Comment these out if not using the audio adaptor board.
   // This may wait forever if the SDA & SCL pins lack
@@ -126,12 +137,66 @@ void playFile(const char *filename)
   Serial.println("  -> Lecture terminee.");
 }
 
+void playHexaFiles(const char *f1, const char *f2, const char *f3)
+{
+  Serial.println("\n========================================");
+  Serial.println("Lancement de la lecture Hexa (6 fichiers Mono en silence)...");
+
+  playWav1.play(f1);
+  playWav2.play(f2);
+  playWav3.play(f3);
+  // playWav4.play(f4);
+  // playWav5.play(f5);
+  // playWav6.play(f6);
+
+  delay(25);
+
+  if (!playWav1.isPlaying() || !playWav2.isPlaying() || !playWav3.isPlaying() || !playWav4.isPlaying() || !playWav5.isPlaying() || !playWav6.isPlaying()) {
+    Serial.println("  -> Erreur: Un ou plusieurs fichiers sont introuvables !");
+    return;
+  }
+
+  uint32_t lengthMillis = playWav1.lengthMillis();
+  Serial.print("  -> Duree totale : ");
+  Serial.print(lengthMillis);
+  Serial.println(" ms");
+
+  uint32_t lastPrint = 0;
+  while (playWav1.isPlaying() || playWav2.isPlaying() || playWav3.isPlaying() || playWav4.isPlaying() || playWav5.isPlaying() || playWav6.isPlaying()) {
+    if (millis() - lastPrint >= 500) { // Mise à jour toutes les demi-secondes
+      uint32_t pos = playWav1.positionMillis();
+      int percent = (lengthMillis > 0) ? (pos * 100) / lengthMillis : 0;
+
+      // Création d'une barre de progression visuelle [========>   ]
+      Serial.print("  [");
+      for (int i = 0; i < 20; i++) {
+        if (i < (percent / 5)) Serial.print("=");
+        else if (i == (percent / 5)) Serial.print(">");
+        else Serial.print(" ");
+      }
+      Serial.print("] ");
+      Serial.print(percent);
+      Serial.print("%  (");
+      Serial.print(pos);
+      Serial.println(" ms)");
+
+      lastPrint = millis();
+    }
+  }
+  Serial.println("  -> Lecture hexa terminee.");
+  Serial.println("========================================");
+}
 
 void loop() {
-  playFile("Guitarist1-1_1-rec-impro_01-hexa_in.wav");  // filenames are always uppercase 8.3 format
+#ifdef MODE_HEXA
+  playHexaFiles("1.wav", "2.wav", "3.wav");  // filenames are always uppercase 8.3 format
+  delay(2000);
+#else
+  playFile("1.wav");  // filenames are always uppercase 8.3 format
   delay(500);
-  playFile("Guitarist2-1_1-rec-impro_01-hexa_in.wav");
+  playFile("2.wav");
   delay(500);
-  playFile("SebastienBeaumont-1_1-improvisation_01.wav");
+  playFile("3.wav");
   delay(1500);
+#endif
 }
