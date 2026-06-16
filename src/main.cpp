@@ -11,42 +11,30 @@ AudioPlaySdWav playWav1;
 AudioPlaySdWav playWav2;
 AudioPlaySdWav playWav3;
 
-// --- 2. LES MIXEURS (Notre table de mixage virtuelle) ---
-AudioMixer4 mixerLeft;
-AudioMixer4 mixerRight;
+// --- 2. LA SORTIE (USB 6 Canaux vers le PC) ---
+// On remplace la sortie Stéréo par la sortie Hexaphonique
+AudioOutputUSBHex usbOutHex;
 
-// --- 3. LA SORTIE (USB Stéréo vers le PC) ---
-AudioOutputUSB usbOut;
+// --- 3. LE ROUTAGE DIRECT (Passthrough pur 6 canaux) ---
 
-// --- 4. LE ROUTAGE HEXAPHONIQUE (Le Passthrough) ---
+// Fichier 1 -> Canaux USB 0 & 1 (Cordes 1 & 2)
+AudioConnection patchCorde1(playWav1, 0, usbOutHex, 0);
+AudioConnection patchCorde2(playWav1, 1, usbOutHex, 1);
 
-// CORDE 1 : Fichier 1 (Gauche) -> Mixeur Gauche (Canal 0)
-AudioConnection patchCorde1(playWav1, 0, mixerLeft, 0);
+// Fichier 2 -> Canaux USB 2 & 3 (Cordes 3 & 4)
+AudioConnection patchCorde3(playWav2, 0, usbOutHex, 2);
+AudioConnection patchCorde4(playWav2, 1, usbOutHex, 3);
 
-// CORDE 2 : Fichier 1 (Droite) -> Mixeur Droit (Canal 0)
-AudioConnection patchCorde2(playWav1, 1, mixerRight, 0);
-
-// CORDE 3 : Fichier 2 (Gauche) -> Mixeur Gauche (Canal 1)
-AudioConnection patchCorde3(playWav2, 0, mixerLeft, 1);
-
-// CORDE 4 : Fichier 2 (Droite) -> Mixeur Droit (Canal 1)
-AudioConnection patchCorde4(playWav2, 1, mixerRight, 1);
-
-// CORDE 5 : Fichier 3 (Gauche) -> Mixeur Gauche (Canal 2)
-AudioConnection patchCorde5(playWav3, 0, mixerLeft, 2);
-
-// CORDE 6 : Fichier 3 (Droite) -> Mixeur Droit (Canal 2)
-AudioConnection patchCorde6(playWav3, 1, mixerRight, 2);
-
-// ENVOI AU PC : Mixeurs -> Câble USB
-AudioConnection outGauche(mixerLeft, 0, usbOut, 0);
-AudioConnection outDroite(mixerRight, 0, usbOut, 1);
+// Fichier 3 -> Canaux USB 4 & 5 (Cordes 5 & 6)
+AudioConnection patchCorde5(playWav3, 0, usbOutHex, 4);
+AudioConnection patchCorde6(playWav3, 1, usbOutHex, 5);
 
 
 void setup() {
   pinMode(LED_BUILTIN, OUTPUT);
   Serial.begin(9600);
 
+  // Sécurité Moniteur Série
   while (!Serial) {
     digitalWrite(LED_BUILTIN, HIGH);
     delay(100);
@@ -54,31 +42,16 @@ void setup() {
     delay(100);
   }
 
-  Serial.println("--- Démarrage du Test Hexaphonique ---");
-  AudioMemory(40);
-
-  // ---------------------------------------------------------
-  // LA TABLE DE MIXAGE (Test des cordes)
-  // Règle le volume entre 0.0 (Muet) et 1.0 (Maximum)
-  // ---------------------------------------------------------
-
-  // PAIRE 1 (Cordes 1 & 2)
-  mixerLeft.gain(0, 0.8);  // Corde 1 (Oreille Gauche)
-  mixerRight.gain(0, 0.8); // Corde 2 (Oreille Droite)
-
-  // PAIRE 2 (Cordes 3 & 4)
-  mixerLeft.gain(1, 0.0);  // Corde 3 (Muet pour le test)
-  mixerRight.gain(1, 0.0); // Corde 4 (Muet pour le test)
-
-  // PAIRE 3 (Cordes 5 & 6)
-  mixerLeft.gain(2, 0.0);  // Corde 5 (Muet pour le test)
-  mixerRight.gain(2, 0.0); // Corde 6 (Muet pour le test)
-  // ---------------------------------------------------------
+  Serial.println("--- Démarrage du Test Hexaphonique (USB 6 Canaux) ---");
+  
+  // On alloue un peu plus de mémoire car l'USB 6 canaux est plus gourmand
+  AudioMemory(60);
 
   if (!(SD.begin(SDCARD_CS_PIN))) {
     Serial.println("Erreur SD !");
     while (1);
   }
+  Serial.println("Carte SD OK !");
 }
 
 void loop() {
