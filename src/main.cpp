@@ -1,142 +1,89 @@
-
-// Simple WAV file player example
-//
-// Three types of output may be used, by configuring the code below.
-//
-//   1: Digital I2S - Normally used with the audio shield:
-//         http://www.pjrc.com/store/teensy3_audio.html
-//
-//   2: Digital S/PDIF - Connect pin 22 to a S/PDIF transmitter
-//         https://www.oshpark.com/shared_projects/KcDBKHta
-//
-//   3: Analog DAC - Connect the DAC pin to an amplified speaker
-//         http://www.pjrc.com/teensy/gui/?info=AudioOutputAnalog
-//
-// To configure the output type, first uncomment one of the three
-// output objects.  If not using the audio shield, comment out
-// the sgtl5000_1 lines in setup(), so it does not wait forever
-// trying to configure the SGTL5000 codec chip.
-//
-// The SD card may connect to different pins, depending on the
-// hardware you are using.  Uncomment or configure the SD card
-// pins to match your hardware.
-//
-// Data files to put on your SD card can be downloaded here:
-//   http://www.pjrc.com/teensy/td_libs_AudioDataFiles.html
-//
-// This example code is in the public domain.
-
 #include <Audio.h>
 #include <Wire.h>
 #include <SPI.h>
 #include <SD.h>
 #include <SerialFlash.h>
 
-AudioPlaySdWav           playWav1;
-AudioPlaySdWav           playWav2;
-AudioPlaySdWav           playWav3;
+#define SDCARD_CS_PIN   BUILTIN_SDCARD
 
-// Use one of these 3 output types: Digital I2S, Digital S/PDIF, or Analog DAC
-//AudioOutputI2S           audioOutput;
-//AudioOutputSPDIF         audioOutput;
-//AudioOutputAnalog        audioOutput;
-//On Teensy LC, use this for the Teensy Audio Shield:
-//AudioOutputI2Sslave      audioOutput;
+// 1. Les 3 lecteurs de fichiers SD
+AudioPlaySdWav          playWav1;
+AudioPlaySdWav          playWav2;
+AudioPlaySdWav          playWav3;
 
+// 2. Les 2 mixeurs
+AudioMixer4             mixerLeft;
+AudioMixer4             mixerRight;
 
-AudioOutputUSB           audioOutput;
+// 3. LA CORRECTION : Sortie USB standard 2 canaux
+AudioOutputUSB          usbOut; 
 
+// --- ROUTAGE GAUCHE (Canal 0 des fichiers -> Mixeur Gauche) ---
+AudioConnection patchG1(playWav1, 0, mixerLeft,  0);
+AudioConnection patchG2(playWav2, 0, mixerLeft,  1);
+AudioConnection patchG3(playWav3, 0, mixerLeft,  2);
 
+// --- ROUTAGE DROIT (Canal 1 des fichiers -> Mixeur Droit) ---
+AudioConnection patchD1(playWav1, 1, mixerRight, 0);
+AudioConnection patchD2(playWav2, 1, mixerRight, 1);
+AudioConnection patchD3(playWav3, 1, mixerRight, 2);
 
-AudioConnection          patchCord1(playWav1, 0, audioOutput, 0);
-AudioConnection          patchCord2(playWav1, 1, audioOutput, 1);
-
-
-AudioControlSGTL5000     sgtl5000_1;
-
-// Use these with the Teensy Audio Shield
-//#define SDCARD_CS_PIN    10
-//#define SDCARD_MOSI_PIN  7   // Teensy 4 ignores this, uses pin 11
-//#define SDCARD_SCK_PIN   14  // Teensy 4 ignores this, uses pin 13
-
-// Use these with the Teensy 3.5 & 3.6 & 4.1 SD card
-#define SDCARD_CS_PIN    BUILTIN_SDCARD
-#define SDCARD_MOSI_PIN  11  // not actually used
-#define SDCARD_SCK_PIN   13  // not actually used
-
-// Use these for the SD+Wiz820 or other adaptors
-//#define SDCARD_CS_PIN    4
-//#define SDCARD_MOSI_PIN  11
-//#define SDCARD_SCK_PIN   13
+// --- SORTIE (Mixeurs -> USB) ---
+AudioConnection outGauche(mixerLeft,  0, usbOut, 0);
+AudioConnection outDroite(mixerRight, 0, usbOut, 1);
 
 void setup() {
+  pinMode(LED_BUILTIN, OUTPUT);
   Serial.begin(9600);
 
-
-  delay(2000);
-
-  // Audio connections require memory to work.  For more
-  // detailed information, see the MemoryAndCpuUsage example
-  AudioMemory(60);
-
-  // Comment these out if not using the audio adaptor board.
-  // This may wait forever if the SDA & SCL pins lack
-  // pullup resistors
- //sgtl5000_1.enable();
- //sgtl5000_1.volume(0.5);
-
-  SPI.setMOSI(SDCARD_MOSI_PIN);
-  SPI.setSCK(SDCARD_SCK_PIN);
-  if (!(SD.begin(SDCARD_CS_PIN))) {
-    // stop here, but print a message repetitively
-    while (1) {
-      Serial.println("Unable to access the SD card");
-      delay(500);
-    }
+  // Sécurité Moniteur Série
+  while (!Serial) {
+    digitalWrite(LED_BUILTIN, HIGH);
+    delay(100);
+    digitalWrite(LED_BUILTIN, LOW);
+    delay(100);
   }
-}
 
-void playFile(const char *filename)
-{
-  Serial.print("Playing file: ");
-  Serial.println(filename);
-
-  // Start playing the file.  This sketch continues to
-  // run while the file plays.
-  playWav1.play(filename);
-
-  // A brief delay for the library read WAV info
-  delay(25);
-
+  Serial.println("--- Début de l'initialisation ---");
   
-  if (!playWav1.isPlaying()) {
-    Serial.println("  -> Erreur: Fichier introuvable ou format invalide !");
-    return;
-  }  
-  Serial.print("  -> Duree totale : ");
-  Serial.print(playWav1.lengthMillis());
-  Serial.println(" ms");
+  AudioMemory(40);
 
-  uint32_t lastPrint = 0;
-  // Simply wait for the file to finish playing.
-  while (playWav1.isPlaying()) {
-    // Affiche la progression toutes les secondes (1000 ms)
-    if (millis() - lastPrint >= 1000) {
-      Serial.print("  Avancement : ");
-      Serial.print(playWav1.positionMillis());
-      Serial.println(" ms");
-      lastPrint = millis();
-    }
+  // Application du gain (-10dB environ) pour éviter la saturation du mélange
+  for (int i=0; i<3; i++) {
+    mixerLeft.gain(i, 0.33);
+    mixerRight.gain(i, 0.33);
   }
-  Serial.println("  -> Lecture terminee.");
-}
 
+  Serial.println("Initialisation de la carte SD...");
+  if (!(SD.begin(SDCARD_CS_PIN))) {
+    Serial.println("ERREUR : Impossible d'accéder à la carte SD !");
+    while (1); // Bloque ici si pas de carte
+  }
+  Serial.println("Carte SD OK !");
+}
 
 void loop() {
-  playFile("1.wav");  
-  delay(500);
-  playFile("2.wav");
-  delay(500);
-  playFile("3.wav");
-  delay(1500);
+  Serial.println("Lecture des fichiers...");
+  
+  // Lancement simultané
+  playWav1.play("1.wav");
+  playWav2.play("2.wav");
+  playWav3.play("3.wav");
+
+  delay(50); // Laisse le temps au processeur d'ouvrir les fichiers
+
+  // Vérification de sécurité
+  if (!playWav1.isPlaying() && !playWav2.isPlaying() && !playWav3.isPlaying()) {
+    Serial.println("Erreur: Les fichiers 1.wav, 2.wav et 3.wav sont introuvables à la racine !");
+    delay(2000);
+    return;
+  }
+
+  // Boucle d'attente : on ne fait rien tant que la musique tourne
+  while (playWav1.isPlaying() || playWav2.isPlaying() || playWav3.isPlaying()) {
+    delay(100);
+  }
+
+  Serial.println("Fin de lecture. Redémarrage dans 2 secondes...");
+  delay(2000);
 }
