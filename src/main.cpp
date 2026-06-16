@@ -4,39 +4,49 @@
 #include <SD.h>
 #include <SerialFlash.h>
 
-#define SDCARD_CS_PIN   BUILTIN_SDCARD
+#define SDCARD_CS_PIN BUILTIN_SDCARD
 
-// 1. Les 3 lecteurs de fichiers SD
-AudioPlaySdWav          playWav1;
-AudioPlaySdWav          playWav2;
-AudioPlaySdWav          playWav3;
+// --- 1. LES LECTEURS (3 fichiers stéréo) ---
+AudioPlaySdWav playWav1;
+AudioPlaySdWav playWav2;
+AudioPlaySdWav playWav3;
 
-// 2. Les 2 mixeurs
-AudioMixer4             mixerLeft;
-AudioMixer4             mixerRight;
+// --- 2. LES MIXEURS (Notre table de mixage virtuelle) ---
+AudioMixer4 mixerLeft;
+AudioMixer4 mixerRight;
 
-// 3. LA CORRECTION : Sortie USB standard 2 canaux
-AudioOutputUSB          usbOut; 
+// --- 3. LA SORTIE (USB Stéréo vers le PC) ---
+AudioOutputUSB usbOut;
 
-// --- ROUTAGE GAUCHE (Canal 0 des fichiers -> Mixeur Gauche) ---
-AudioConnection patchG1(playWav1, 0, mixerLeft,  0);
-AudioConnection patchG2(playWav2, 0, mixerLeft,  1);
-AudioConnection patchG3(playWav3, 0, mixerLeft,  2);
+// --- 4. LE ROUTAGE HEXAPHONIQUE (Le Passthrough) ---
 
-// --- ROUTAGE DROIT (Canal 1 des fichiers -> Mixeur Droit) ---
-AudioConnection patchD1(playWav1, 1, mixerRight, 0);
-AudioConnection patchD2(playWav2, 1, mixerRight, 1);
-AudioConnection patchD3(playWav3, 1, mixerRight, 2);
+// CORDE 1 : Fichier 1 (Gauche) -> Mixeur Gauche (Canal 0)
+AudioConnection patchCorde1(playWav1, 0, mixerLeft, 0);
 
-// --- SORTIE (Mixeurs -> USB) ---
-AudioConnection outGauche(mixerLeft,  0, usbOut, 0);
+// CORDE 2 : Fichier 1 (Droite) -> Mixeur Droit (Canal 0)
+AudioConnection patchCorde2(playWav1, 1, mixerRight, 0);
+
+// CORDE 3 : Fichier 2 (Gauche) -> Mixeur Gauche (Canal 1)
+AudioConnection patchCorde3(playWav2, 0, mixerLeft, 1);
+
+// CORDE 4 : Fichier 2 (Droite) -> Mixeur Droit (Canal 1)
+AudioConnection patchCorde4(playWav2, 1, mixerRight, 1);
+
+// CORDE 5 : Fichier 3 (Gauche) -> Mixeur Gauche (Canal 2)
+AudioConnection patchCorde5(playWav3, 0, mixerLeft, 2);
+
+// CORDE 6 : Fichier 3 (Droite) -> Mixeur Droit (Canal 2)
+AudioConnection patchCorde6(playWav3, 1, mixerRight, 2);
+
+// ENVOI AU PC : Mixeurs -> Câble USB
+AudioConnection outGauche(mixerLeft, 0, usbOut, 0);
 AudioConnection outDroite(mixerRight, 0, usbOut, 1);
+
 
 void setup() {
   pinMode(LED_BUILTIN, OUTPUT);
   Serial.begin(9600);
 
-  // Sécurité Moniteur Série
   while (!Serial) {
     digitalWrite(LED_BUILTIN, HIGH);
     delay(100);
@@ -44,46 +54,46 @@ void setup() {
     delay(100);
   }
 
-  Serial.println("--- Début de l'initialisation ---");
-  
+  Serial.println("--- Démarrage du Test Hexaphonique ---");
   AudioMemory(40);
 
-  // Application du gain (-10dB environ) pour éviter la saturation du mélange
-  for (int i=0; i<3; i++) {
-    mixerLeft.gain(i, 0.33);
-    mixerRight.gain(i, 0.33);
-  }
+  // ---------------------------------------------------------
+  // LA TABLE DE MIXAGE (Test des cordes)
+  // Règle le volume entre 0.0 (Muet) et 1.0 (Maximum)
+  // ---------------------------------------------------------
 
-  Serial.println("Initialisation de la carte SD...");
+  // PAIRE 1 (Cordes 1 & 2)
+  mixerLeft.gain(0, 0.8);  // Corde 1 (Oreille Gauche)
+  mixerRight.gain(0, 0.8); // Corde 2 (Oreille Droite)
+
+  // PAIRE 2 (Cordes 3 & 4)
+  mixerLeft.gain(1, 0.0);  // Corde 3 (Muet pour le test)
+  mixerRight.gain(1, 0.0); // Corde 4 (Muet pour le test)
+
+  // PAIRE 3 (Cordes 5 & 6)
+  mixerLeft.gain(2, 0.0);  // Corde 5 (Muet pour le test)
+  mixerRight.gain(2, 0.0); // Corde 6 (Muet pour le test)
+  // ---------------------------------------------------------
+
   if (!(SD.begin(SDCARD_CS_PIN))) {
-    Serial.println("ERREUR : Impossible d'accéder à la carte SD !");
-    while (1); // Bloque ici si pas de carte
+    Serial.println("Erreur SD !");
+    while (1);
   }
-  Serial.println("Carte SD OK !");
 }
 
 void loop() {
-  Serial.println("Lecture des fichiers...");
+  Serial.println("Lecture en cours...");
   
-  // Lancement simultané
   playWav1.play("1.wav");
   playWav2.play("2.wav");
   playWav3.play("3.wav");
 
-  delay(50); // Laisse le temps au processeur d'ouvrir les fichiers
+  delay(50);
 
-  // Vérification de sécurité
-  if (!playWav1.isPlaying() && !playWav2.isPlaying() && !playWav3.isPlaying()) {
-    Serial.println("Erreur: Les fichiers 1.wav, 2.wav et 3.wav sont introuvables à la racine !");
-    delay(2000);
-    return;
-  }
-
-  // Boucle d'attente : on ne fait rien tant que la musique tourne
   while (playWav1.isPlaying() || playWav2.isPlaying() || playWav3.isPlaying()) {
     delay(100);
   }
 
-  Serial.println("Fin de lecture. Redémarrage dans 2 secondes...");
+  Serial.println("Fin. Redémarrage...");
   delay(2000);
 }
