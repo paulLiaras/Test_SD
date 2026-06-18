@@ -19,15 +19,25 @@ AudioOutputUSBHex usbOutHex;
 AudioOutputTDM2 tdmOut;
 AudioInputTDM2  tdmIn;
 
-// --- 4. LE ROUTAGE STEREO (SD -> TDM2 -> DAISY -> TDM2 -> USB) ---
+// --- 4. LE ROUTAGE HEXAPHONIQUE (SD -> TDM2 -> DAISY -> TDM2 -> USB) ---
 
-// A) SD -> TDM2 OUT (Vers Daisy, sur les ports pairs 0 et 2 = slots 0 et 1)
+// A) SD -> TDM2 OUT (Vers Daisy, ports pairs 0, 2, 4, 6, 8, 10 = slots 0 à 5)
 AudioConnection patchSdToTdm1(playWav1, 0, tdmOut, 0);
 AudioConnection patchSdToTdm2(playWav1, 1, tdmOut, 2);
 
-// B) TDM2 IN -> USB (Depuis Daisy, ports pairs 0 et 2 vers PC)
+AudioConnection patchSdToTdm3(playWav2, 0, tdmOut, 4);
+AudioConnection patchSdToTdm4(playWav2, 1, tdmOut, 6);
+
+AudioConnection patchSdToTdm5(playWav3, 0, tdmOut, 8);
+AudioConnection patchSdToTdm6(playWav3, 1, tdmOut, 10);
+
+// B) TDM2 IN -> USB (Depuis Daisy, ports pairs 0, 2, 4, 6, 8, 10 vers PC)
 AudioConnection patchTdmToUsb1(tdmIn, 0, usbOutHex, 0);
 AudioConnection patchTdmToUsb2(tdmIn, 2, usbOutHex, 1);
+AudioConnection patchTdmToUsb3(tdmIn, 4, usbOutHex, 2);
+AudioConnection patchTdmToUsb4(tdmIn, 6, usbOutHex, 3);
+AudioConnection patchTdmToUsb5(tdmIn, 8, usbOutHex, 4);
+AudioConnection patchTdmToUsb6(tdmIn, 10, usbOutHex, 5);
 
 
 void setup() {
@@ -58,12 +68,12 @@ void loop() {
   Serial.println("Lecture en cours...");
   
   playWav1.play("1.wav");
-  // playWav2.play("2.wav"); // Désactivé pour le test stéréo
-  // playWav3.play("3.wav"); // Désactivé pour le test stéréo
+  playWav2.play("2.wav"); // Réactivé
+  playWav3.play("3.wav"); // Réactivé
 
   delay(50);
 
-  while (playWav1.isPlaying()) {
+  while (playWav1.isPlaying() || playWav2.isPlaying() || playWav3.isPlaying()) {
     delay(100);
   }
 
